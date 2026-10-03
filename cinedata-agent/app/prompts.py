@@ -20,8 +20,9 @@ REGRAS:
    Nota média dos usuários: dim_reviews.nota_media_usuarios, com
    qtd_avaliacoes_usuarios > 0. "Mais avaliados pelos usuários":
    dim_reviews.qtd_avaliacoes_usuarios em ordem decrescente.
-8. "Últimos N anos": ano_lancamento >= (REFERÊNCIA TEMPORAL - N + 1), usando o
-   número da REFERÊNCIA TEMPORAL do schema.
+8. "Últimos N anos" e "filmes lançados": status_filme = 'Lançado' E
+   ano_lancamento >= (REFERÊNCIA TEMPORAL - N + 1), usando o número da
+   REFERÊNCIA TEMPORAL do schema.
 9. Ator e diretor ficam em dim_people (coluna tipo_pessoa, valores exatamente
    como em VALORES DISTINTOS), ligados aos filmes por bridge_movie_person. Para
    relacionar dois papéis no mesmo filme, faça um JOIN separado por papel.

@@ -23,9 +23,9 @@ def db_path(tmp_path):
             sk_person_id TEXT REFERENCES dim_people(sk_person_id),
             PRIMARY KEY (sk_movie_id, sk_person_id));
         INSERT INTO dim_movies VALUES
-            ('m1','Alpha',2020,'Released'), ('m2','Beta',2023,'Released'),
-            ('m3','Gamma',2021,'Released'), ('m4','Delta',2022,'Released'),
-            ('m5','Epsilon',2019,'Released');
+            ('m1','Alpha',2020,'Lançado'), ('m2','Beta',2023,'Lançado'),
+            ('m3','Gamma',2021,'Lançado'), ('m4','Delta',2022,'Lançado'),
+            ('m5','Epsilon',2019,'Lançado'), ('m6','Zeta',2029,'Planejado');
         INSERT INTO dim_people VALUES ('p1','Ana','Ator'), ('p2','Bruno','Diretor');
         """
     )
@@ -64,7 +64,8 @@ def test_schema_is_read_from_database(db_path):
     assert "sk_movie_id TEXT [PK, NOT NULL" in schema or "sk_movie_id TEXT [PK" in schema
     assert "-> dim_movies.sk_movie_id" in schema
     assert '"Ator"' in schema and '"Diretor"' in schema
-    assert "maior ano_lancamento do banco é 2023" in schema
+    assert "(status_filme = 'Lançado') é 2023" in schema
+    assert "2029" not in schema  # filme planejado não define a referência
 
 
 def test_missing_database_raises(tmp_path):

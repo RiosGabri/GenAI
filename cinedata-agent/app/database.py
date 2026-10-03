@@ -64,7 +64,8 @@ class Database:
                 row[0]
                 for row in conn.execute(
                     "SELECT name FROM sqlite_master "
-                    "WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+                    "WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
+                    "AND name != 'alembic_version' ORDER BY name"
                 )
             ]
 
@@ -101,7 +102,8 @@ class Database:
             max_year = self._max_year(conn)
             if max_year is not None:
                 parts.append(
-                    f"\nREFERÊNCIA TEMPORAL: o maior ano_lancamento do banco é {max_year}."
+                    f"\nREFERÊNCIA TEMPORAL: o maior ano_lancamento dos filmes lançados "
+                    f"(status_filme = 'Lançado') é {max_year}. Outros status podem ter anos futuros."
                 )
 
             return "\n".join(parts)
@@ -121,10 +123,19 @@ class Database:
 
     @staticmethod
     def _max_year(conn: sqlite3.Connection) -> int | None:
-        try:
-            return conn.execute("SELECT MAX(ano_lancamento) FROM dim_movies").fetchone()[0]
-        except sqlite3.Error:
-            return None
+        # Filmes planejados ou em produção têm anos futuros (o banco chega a 2029);
+        # a referência de "últimos N anos" deve vir só dos filmes já lançados.
+        for sql in (
+            "SELECT MAX(ano_lancamento) FROM dim_movies WHERE status_filme = 'Lançado'",
+            "SELECT MAX(ano_lancamento) FROM dim_movies",
+        ):
+            try:
+                year = conn.execute(sql).fetchone()[0]
+            except sqlite3.Error:
+                return None
+            if year is not None:
+                return year
+        return None
 
     def execute_readonly(self, sql: str, max_rows: int = 100) -> QueryResult:
         conn = self.connect()
