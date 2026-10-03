@@ -8,7 +8,11 @@ def main():
     print("Digite 'sair' para encerrar.\n")
 
     while True:
-        question = input("Pergunta> ").strip()
+        try:
+            question = input("Pergunta> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
 
         if question.lower() in {"sair", "exit", "quit"}:
             break

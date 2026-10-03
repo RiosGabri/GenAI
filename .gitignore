@@ -1,0 +1,15 @@
+# Segredos e dados
+.env
+*.db
+*.sqlite
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
