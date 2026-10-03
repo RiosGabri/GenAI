@@ -82,6 +82,7 @@ def test_sql_error_is_fed_back_once(db_path):
     result = agent.ask("liste os filmes")
     assert result.attempts == 2 and len(result.rows) == 2
     assert "no such column" in client.calls[1]["messages"][-1]["content"]
+    assert len(result.failures) == 1 and "no such column" in result.failures[0]
 
 
 def test_gives_up_after_max_attempts_without_touching_db(db_path):
@@ -103,6 +104,19 @@ def test_fallback_model_is_used_on_rate_limit(db_path):
     result = agent.ask("teste")
     assert [call["model"] for call in client.calls] == ["m1", "m2"]
     assert result.rows == [{"x": 1}]
+
+
+def not_found_error():
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    return openai.NotFoundError("404", response=httpx.Response(404, request=request), body=None)
+
+
+def test_nonexistent_model_is_skipped_on_later_questions(db_path):
+    agent, client = make_agent(db_path, [not_found_error(), "SELECT 1 AS x", "SELECT 1 AS x"])
+    agent.ask("primeira")
+    result = agent.ask("segunda")
+    assert [call["model"] for call in client.calls] == ["m1", "m2", "m2"]
+    assert result.llm_calls == 1 and result.model == "m2"
 
 
 def test_all_models_failing_reports_error(db_path):

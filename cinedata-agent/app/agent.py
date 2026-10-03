@@ -4,7 +4,13 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
 
-from openai import APIConnectionError, APIStatusError, AuthenticationError, OpenAI
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    AuthenticationError,
+    NotFoundError,
+    OpenAI,
+)
 
 from .config import Settings
 from .config import settings as default_settings
@@ -34,6 +40,8 @@ class AgentResult:
     error: str | None = None
     attempts: int = 0
     llm_calls: int = 0
+    model: str | None = None
+    failures: list[str] = field(default_factory=list)
 
 
 class CineDataAgent:
@@ -71,12 +79,16 @@ class CineDataAgent:
         self.db = db or Database(settings.db_path, settings.query_timeout_seconds)
         self.models = list(dict.fromkeys([settings.model, *settings.fallback_models]))
         self._llm_calls = 0
+        self._dead_models: set[str] = set()
+        self.last_model: str | None = None
 
     # ------------------------------------------------------------------ LLM
 
     def _chat(self, messages: list[dict[str, str]]) -> str:
         errors = []
         for model in self.models:
+            if model in self._dead_models:
+                continue  # id inexistente: repetir só gastaria a cota diária
             self._llm_calls += 1
             try:
                 response = self.client.chat.completions.create(
@@ -87,13 +99,18 @@ class CineDataAgent:
                     "Chave do OpenRouter inválida ou ausente (401)."
                 ) from exc
             except (APIStatusError, APIConnectionError) as exc:
+                if isinstance(exc, NotFoundError):
+                    self._dead_models.add(model)
                 logger.warning("Modelo %s falhou: %s", model, type(exc).__name__)
                 errors.append(f"{model}: {type(exc).__name__}")
                 continue
 
+            self.last_model = model
             choices = getattr(response, "choices", None)
             return (choices[0].message.content or "") if choices else ""
 
+        if not errors:
+            errors = ["todos os modelos configurados foram descartados nesta sessão"]
         raise LLMUnavailableError(
             "Nenhum modelo respondeu (" + "; ".join(errors) + "). "
             "Pode ser pool lotado (tente outro modelo) ou cota diária esgotada."
@@ -113,6 +130,7 @@ class CineDataAgent:
             result.error = str(exc)
 
         result.llm_calls = self._llm_calls - calls_before
+        result.model = self.last_model if result.llm_calls else None
         return result
 
     def _generate_and_execute(self, question: str, result: AgentResult) -> None:
@@ -137,6 +155,7 @@ class CineDataAgent:
                 query = self.db.execute_readonly(sql, self.settings.max_rows)
             except (ValueError, sqlite3.Error, QueryTimeoutError) as exc:
                 last_error = str(exc)
+                result.failures.append(f"{last_error} (resposta do modelo: {raw.strip()[:200]!r})")
                 messages.append({"role": "assistant", "content": raw})
                 messages.append({"role": "user", "content": RETRY_PROMPT.format(error=last_error)})
                 continue
@@ -182,6 +201,7 @@ class CineDataAgent:
             body = f"Não consegui responder: {result.error}"
             if self.settings.show_sql and result.sql:
                 body += f"\n\nÚltimo SQL tentado:\n{result.sql}"
+            body += self._failures_block(result)
         else:
             parts = []
             if result.answer:
@@ -191,9 +211,20 @@ class CineDataAgent:
                 parts.append(f"(resultado limitado às primeiras {self.settings.max_rows} linhas)")
             if self.settings.show_sql:
                 parts.append(f"SQL executado:\n{result.sql}")
-            body = "\n\n".join(parts)
+            body = "\n\n".join(parts) + self._failures_block(result)
 
-        return f"{body}\n\n[chamadas ao modelo nesta pergunta: {result.llm_calls}]"
+        footer = f"chamadas ao modelo nesta pergunta: {result.llm_calls}"
+        if result.model:
+            footer += f"; último modelo que respondeu: {result.model}"
+        return f"{body}\n\n[{footer}]"
+
+    def _failures_block(self, result: AgentResult) -> str:
+        """Tentativas descartadas (cada uma custou uma chamada); só com SHOW_SQL."""
+
+        if not (self.settings.show_sql and result.failures):
+            return ""
+        lines = "\n".join(f"- {failure}" for failure in result.failures)
+        return f"\n\nTentativas descartadas:\n{lines}"
 
     def answer_text(self, question: str) -> str:
         return self.render(self.ask(question))

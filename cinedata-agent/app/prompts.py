@@ -30,7 +30,8 @@ REGRAS:
     antes de juntar quando necessário.
 11. Mínimos ("mínimo de 5 filmes") vão em HAVING COUNT(DISTINCT sk_movie_id) >= 5.
 12. Top N: ORDER BY decrescente + LIMIT N. Sem N explícito, use LIMIT 10.
-13. Dê apelidos legíveis às colunas retornadas.
+13. Dê apelidos em snake_case ASCII às colunas (sem acentos nem símbolos como $).
+    Em colunas monetárias, mantenha o sufixo _brl ou _usd (ex.: receita_brl).
 14. Se a pergunta for ambígua de um jeito que muda o resultado, ou não puder ser
     respondida com este schema, responda SOMENTE com uma linha que começa com
     "ESCLARECIMENTO:" explicando o que falta.
